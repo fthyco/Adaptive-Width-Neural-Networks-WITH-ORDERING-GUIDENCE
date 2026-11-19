@@ -49,3 +49,63 @@ The exporter preserves model training mode, does not modify parameter gradients 
 - Stage 1/2 results must be evaluated on equal saved checkpoints with the same feature tensors and validation samples.
 - Rank screening is not the matched intervention or endogenous bottleneck-triggered training experiment. These must follow with paired seeds, independent test evaluation, controls, total compute and uncertainty reporting.
 - Test results using a fabricated fixture only verify code/counts, **not** AWN performance.
+
+
+## Automated baseline AWN checkpoint generation (new)
+
+From the repository root with AWN dependencies, processed DATA and DATA_SPLITS
+available, install `graphyco==0.2.0` and run either independent stage:
+
+```bash
+# Stage 1: 255 family combinations (one fusion)
+python -m experiments.bottleneck_triggered.evidence_sweep.train_screen \
+  --dataset DoubleMoon --seed 42 --epochs 30 --checkpoint-every 5 \
+  --phase 1 --output RESULTS/evidence_screen/doublemoon_seed42_phase1
+
+# Stage 2: 741 additional multi-family fusion configurations
+python -m experiments.bottleneck_triggered.evidence_sweep.train_screen \
+  --dataset DoubleMoon --seed 42 --epochs 30 --checkpoint-every 5 \
+  --phase 2 --output RESULTS/evidence_screen/doublemoon_seed42_phase2
+
+# One baseline training run, with separate outputs for both stages:
+python -m experiments.bottleneck_triggered.evidence_sweep.train_screen \
+  --dataset DoubleMoon --seed 42 --epochs 30 --checkpoint-every 5 \
+  --phase both --output RESULTS/evidence_screen/doublemoon_seed42
+```
+
+Each selected checkpoint emits an evidence NPZ, a validation NPZ,
+`epochXXXX_phase1.json` or `epochXXXX_phase2.json`, and the run writes
+`run_manifest.json`. Set `--save-model` for model/optimizer snapshots
+(only load PyTorch checkpoint files from trusted sources). The existing original
+AWN classifier/ELBO training API is reused; the sweep only changes observation
+and evidence ranking. No test samples are used in calibration or screening.
+
+### Data leakage protection and sample budgets
+
+Original `common_utils.load_dataset_splits` aliases test data as validation
+when the fold lacks a validation split. This new runner **detects that alias**,
+derives a deterministic 15% validation split and 10% evidence-calibration split
+from the original training fold, and trains on the remainder. If the supplied
+validation is independent of test, only the calibration fraction is drawn from
+training. Screening validation defaults to a deterministic 256-example cap;
+adjust using `--validation-limit`. The resulting training population may be
+smaller than in the historical paper/BT experiments. Therefore these runs must
+not be presented as a direct reproduction of the original baselines.
+
+Temporal H requires the same active stable identity sequence at three
+checkpoints. `identity.py` intercepts AWN's real width changes, preserves
+surviving neuron IDs, and assigns fresh IDs to new neurons. If width changes,
+the history is reset until enough comparable checkpoints exist. No missing
+gradient or temporal record is imputed with zero. A stage may validly report
+skipped candidates when H cannot yet be measured.
+
+### Test and scope
+
+```bash
+pytest -q experiments/bottleneck_triggered/evidence_sweep/tests
+```
+
+The fixed-checkpoint score is not a trained intervention outcome. This runner
+does **not** execute the 14,940 paired full-training runs or modify baseline
+BT permutation logic. The current implementation is one-hidden-layer MLP,
+single-process CPU-first; GRAPHyco GPU telemetry is not claimed verified.
