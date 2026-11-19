@@ -225,8 +225,25 @@ def evaluate_prefix(order: np.ndarray, cached: dict) -> dict:
 def run_phase(phase: int, evidence: Path, output: Path, evaluation: Path | None = None) -> dict:
     ids, scores, audit = read_evidence(evidence)
     eval_data = read_frozen_eval(evaluation, ids) if evaluation is not None else None
+    source_sha = hashlib.sha256(evidence.read_bytes()).hexdigest()
+    # Identical controls across independent phases; no training RNG consumed.
+    controls = {}
+    if eval_data is not None:
+        seed = int(source_sha[:16], 16)
+        control_orders = {
+            "identity": np.arange(len(ids), dtype=int),
+            "random": np.random.default_rng(seed).permutation(len(ids)),
+            "reverse_physical": np.arange(len(ids) - 1, -1, -1, dtype=int),
+        }
+        controls = {
+            name: {"stable_id_order": [ids[int(j)] for j in order],
+                   "frozen_checkpoint_evaluation": evaluate_prefix(order, eval_data)}
+            for name, order in control_orders.items()
+        }
     configs = candidate_configs(phase)
     results = []
+    evaluation_by_order = {}
+    distinct_orders = set()
     for subset, fusion in configs:
         candidate_id = "E" + "".join(subset) + "__" + fusion
         missing = [f for f in subset if f not in scores]
@@ -241,17 +258,30 @@ def run_phase(phase: int, evidence: Path, output: Path, evaluation: Path | None 
                "physical_slot_order": [audit["slots"][i] for i in ordering],
                "score_spread": float(np.ptp(ranks)),
                "tie_fraction": float(1.0 - len(np.unique(ranks)) / len(ranks))}
+        order_key = tuple(int(j) for j in ordering)
+        distinct_orders.add(order_key)
         if eval_data is not None:
-            out["frozen_checkpoint_evaluation"] = evaluate_prefix(ordering, eval_data)
+            # Reuse one evaluation for identical permutations from different fusions.
+            if order_key not in evaluation_by_order:
+                evaluation_by_order[order_key] = evaluate_prefix(ordering, eval_data)
+            measured = evaluation_by_order[order_key]
+            out["frozen_checkpoint_evaluation"] = measured
+            ref = controls["identity"]["frozen_checkpoint_evaluation"]
+            out["prefix_auc_delta_vs_identity"] = (
+                measured["prefix_accuracy_auc"] - ref["prefix_accuracy_auc"])
+            out["full_width_accuracy_delta_vs_identity"] = (
+                measured["prefix_accuracy"][-1] - ref["prefix_accuracy"][-1])
         results.append(out)
     done = sum(r["status"] == "ranked" for r in results)
     report = {"schema_version": "two_phase_sweep_v1", "phase": phase,
               "phase_name": "255_mean_percentile" if phase == 1 else "741_additional_fusions",
-              "source_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+              "source_sha256": source_sha,
               "evaluation_sha256": hashlib.sha256(evaluation.read_bytes()).hexdigest() if evaluation else None,
               "features_available": list(scores), "source_metadata": audit["meta"],
               "feature_issues": audit["issues"], "planned": len(configs),
               "ranked": done, "skipped": len(configs) - done,
+              "distinct_rankings": len(distinct_orders),
+              "controls": controls,
               "evaluated": done if eval_data is not None else 0,
               "evaluation_note": "Frozen-checkpoint screening only; not training or final test accuracy",
               "results": results}
