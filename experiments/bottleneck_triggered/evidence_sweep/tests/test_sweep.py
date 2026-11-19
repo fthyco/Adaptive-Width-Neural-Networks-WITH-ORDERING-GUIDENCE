@@ -57,6 +57,9 @@ def test_run_stages_both_orders(tmp_path):
         assert summary["planned"] == summary["ranked"] == summary["evaluated"] == size
         assert summary["skipped"] == 0
         assert len(summary["results"]) == size
+        assert set(summary["controls"]) == {"identity", "random", "reverse_physical"}
+        assert summary["distinct_rankings"] >= 1
+        assert all("prefix_auc_delta_vs_identity" in row for row in summary["results"])
         assert all(len(set(row["stable_id_order"])) == 6 for row in summary["results"])
         assert all(0 <= row["frozen_checkpoint_evaluation"]["prefix_accuracy_auc"] <= 0.9
                    for row in summary["results"])
