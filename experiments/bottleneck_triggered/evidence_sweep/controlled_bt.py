@@ -152,6 +152,8 @@ def evidence_scores(model, calibration, method: str, device: torch.device) -> np
         )
 
     sums = {k: np.zeros(width, dtype=np.float64) for k in ("G", "J", "I")}
+    need_grad = method in ("G", "J", "GI")
+    need_masking = method in ("I", "GI")
     n = 0
     captured = {}
     def remember_input(_module, args):
@@ -160,7 +162,7 @@ def evidence_scores(model, calibration, method: str, device: torch.device) -> np
     old_mode = model.training
     try:
         model.eval()
-        with torch.enable_grad():
+        with (torch.enable_grad() if need_grad else torch.no_grad()):
             for x, y in calibration:
                 x = x.to(device)
                 y = y.to(device).reshape(-1).long()
@@ -169,17 +171,20 @@ def evidence_scores(model, calibration, method: str, device: torch.device) -> np
                 h = captured["head_input"]
                 if h.shape != (b, width):
                     raise RuntimeError("Unexpected hidden activation dimensions")
-                grad = torch.autograd.grad(F.cross_entropy(logits, y), h)[0] * b
+                grad = (torch.autograd.grad(F.cross_entropy(logits, y), h)[0] * b
+                        if need_grad else None)
                 with torch.no_grad():
-                    sums["G"] += grad.abs().double().sum(0).cpu().numpy()
-                    sums["J"] += (h.detach() * grad).abs().double().sum(0).cpu().numpy()
-                    contributions = h.detach().unsqueeze(-1) * wo.T.unsqueeze(0)
-                    removed = logits.detach().unsqueeze(1) - contributions
-                    ce_removed = F.cross_entropy(
-                        removed.permute(0, 2, 1), y[:, None].expand(b, width),
-                        reduction="none")
-                    ce_original = F.cross_entropy(logits.detach(), y, reduction="none")
-                    sums["I"] += (ce_removed - ce_original[:, None]).double().sum(0).cpu().numpy()
+                    if need_grad:
+                        sums["G"] += grad.abs().double().sum(0).cpu().numpy()
+                        sums["J"] += (h.detach() * grad).abs().double().sum(0).cpu().numpy()
+                    if need_masking:
+                        contributions = h.detach().unsqueeze(-1) * wo.T.unsqueeze(0)
+                        removed = logits.detach().unsqueeze(1) - contributions
+                        ce_removed = F.cross_entropy(
+                            removed.permute(0, 2, 1), y[:, None].expand(b, width),
+                            reduction="none")
+                        ce_original = F.cross_entropy(logits.detach(), y, reduction="none")
+                        sums["I"] += (ce_removed - ce_original[:, None]).double().sum(0).cpu().numpy()
                 n += b
     finally:
         hook.remove()
