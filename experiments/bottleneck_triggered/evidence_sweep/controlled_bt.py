@@ -328,8 +328,12 @@ def run_experiment(dataset: str, seed: int, method: str, gate_mode: str,
                 for epoch in range(1, epochs + 1):
                     train_info = train_epoch(model, train, optimizer, elbo_fn, dev)
                     val_info = check_validation(model, validation, dev)
-                    should_trigger, diagnostic = detector.record_and_evaluate(
-                        epoch, float(val_info["validation_ce"]))
+                    if schedule == "bt":
+                        should_trigger, diagnostic = detector.record_and_evaluate(
+                            epoch, float(val_info["validation_ce"]))
+                        decision = diagnostic.decision
+                    else:
+                        should_trigger, decision = False, "FIXED_SCHEDULE"
                     scheduled = ((epoch in fixed) if schedule == "fixed" else should_trigger)
                     if method == "identity":
                         scheduled = False
@@ -338,7 +342,7 @@ def run_experiment(dataset: str, seed: int, method: str, gate_mode: str,
                     info = {"epoch": epoch, **train_info, **val_info,
                             "width": len(tracker.ids),
                             "gate_priorities": identity.priorities.copy(),
-                            "bottleneck_decision": diagnostic.decision}
+                            "bottleneck_decision": decision}
                     if scheduled:
                         t_evidence = time.perf_counter()
                         if method == "random":
