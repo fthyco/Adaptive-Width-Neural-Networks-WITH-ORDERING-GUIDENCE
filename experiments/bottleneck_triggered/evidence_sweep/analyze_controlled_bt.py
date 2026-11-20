@@ -46,7 +46,7 @@ def analyze(summary_csv: Path, output: Path) -> dict:
         raise ValueError("No controlled BT runs in CSV")
     numeric = ("seed", "final_test_accuracy", "final_test_ce", "optimizer_steps",
                "training_examples", "evidence_seconds", "permutation_seconds",
-               "n_interventions", "final_width")
+               "n_interventions")
     for row in rows:
         for k in numeric:
             row[k] = float(row[k]) if k != "seed" else int(row[k])
