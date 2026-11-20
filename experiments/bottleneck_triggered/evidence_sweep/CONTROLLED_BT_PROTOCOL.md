@@ -53,14 +53,14 @@ For a quick controlled smoke check, run the two-epoch or three-epoch small-calib
 
 From the repository root:
 
-\`\`\`bash
+```bash
 python -m pytest -q experiments/bottleneck_triggered/evidence_sweep/tests
 python -m experiments.bottleneck_triggered.evidence_sweep.controlled_bt \
   --dataset DoubleMoon --seed 42 --method GI --gate-mode neuron_coupled \
   --schedule fixed --fixed-epochs 1 --epochs 2 \
   --max-interventions 1 --max-calibration-batches 1 \
   --device cpu --output RESULTS/controlled_bt/smoke_gi_coupled
-\`\`\`
+```
 
 Confirm the smoke manifest has exactly one intervention and the recorded full-width max output difference is <= 1e-4. Do not remove this assertion to make the run pass.
 
@@ -68,7 +68,7 @@ Confirm the smoke manifest has exactly one intervention and the recorded full-wi
 
 The following sequential pilot uses DoubleMoon seeds 42 and 456, fixed intervention epochs 10 and 20, both gate modes, and one unchanged AWN baseline per seed:
 
-\`\`\`bash
+```bash
 python -m experiments.bottleneck_triggered.evidence_sweep.controlled_bt_suite \
   --datasets DoubleMoon --seeds 42,456 \
   --methods identity,random,W,G,J,I,GI,S,S_tie_shuffle \
@@ -76,11 +76,11 @@ python -m experiments.bottleneck_triggered.evidence_sweep.controlled_bt_suite \
   --schedules fixed --epochs 30 --fixed-epochs 10,20 \
   --max-interventions 2 --device cpu \
   --output RESULTS/controlled_bt/pilot
-\`\`\`
+```
 
 ### Second stage: endogenous BT, only after pilot passes
 
-\`\`\`bash
+```bash
 python -m experiments.bottleneck_triggered.evidence_sweep.controlled_bt_suite \
   --datasets DoubleMoon,Spiral,SpiralHard \
   --seeds 42,123,456,789,1000 \
@@ -88,7 +88,7 @@ python -m experiments.bottleneck_triggered.evidence_sweep.controlled_bt_suite \
   --gate-modes positional,neuron_coupled --schedules bt \
   --max-interventions 2 --device cpu --resume \
   --output RESULTS/controlled_bt/endogenous
-\`\`\`
+```
 
 The extended stage runs sequentially and may be expensive. Do not run it before the fixed-event pilot and scientific checks pass.
 
