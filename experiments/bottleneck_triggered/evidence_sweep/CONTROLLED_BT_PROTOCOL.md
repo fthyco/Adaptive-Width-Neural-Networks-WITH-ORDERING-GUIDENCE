@@ -92,6 +92,26 @@ python -m experiments.bottleneck_triggered.evidence_sweep.controlled_bt_suite \
 
 The extended stage runs sequentially and may be expensive. Do not run it before the fixed-event pilot and scientific checks pass.
 
+## Analyze matched test outcomes (after the pilot finishes)
+
+Run the analysis exactly once on the predetermined pilot results. The test
+split must not be used to choose candidates, modify gates, thresholds or
+intervention timing. This report is for final descriptive evaluation.
+
+~~~bash
+python -m experiments.bottleneck_triggered.evidence_sweep.analyze_controlled_bt \
+  --summary RESULTS/controlled_bt/pilot/summary.csv \
+  --output RESULTS/controlled_bt/pilot/analysis
+~~~
+
+This produces candidate_paired_summary.csv, gating_mode_paired_summary.csv
+and analysis.json. Missing identity baselines and unmatched training step/example
+budgets are reported as hard analysis issues.
+
+Add --save-model to either controlled_bt or controlled_bt_suite to export each
+run's final_checkpoint.pt with model state, optimizer state, stable neuron IDs
+and gate priorities. Never deserialize model checkpoints from untrusted sources.
+
 ## Required validation
 
 1. Confirm original AWN remains byte-identical in core modules.
