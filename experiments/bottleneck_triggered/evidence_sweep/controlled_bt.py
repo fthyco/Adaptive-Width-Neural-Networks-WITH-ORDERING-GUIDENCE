@@ -13,6 +13,7 @@ import json
 import math
 from pathlib import Path
 import random
+import subprocess
 import time
 
 import numpy as np
@@ -267,7 +268,8 @@ def run_experiment(dataset: str, seed: int, method: str, gate_mode: str,
                    fixed_epochs: tuple[int, ...] = (10, 20),
                    max_interventions: int = 2, device: str = "cpu",
                    learning_rate: float = 0.01,
-                   max_calibration_batches: int | None = None) -> dict:
+                   max_calibration_batches: int | None = None,
+                   save_model: bool = False) -> dict:
     """Train ONE controlled AWN model with predeclared intervention logic.
 
     All compared methods must use identical data split, seed, epoch budget, LR,
@@ -361,11 +363,32 @@ def run_experiment(dataset: str, seed: int, method: str, gate_mode: str,
                 test_loader = DataLoader(raw_test.dataset, batch_size=256,
                                          shuffle=False, num_workers=0)
                 test_result = check_validation(model, test_loader, dev)
+                if save_model:
+                    torch.save({
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "neuron_ids": tracker.snapshot(),
+                        "gate_priorities": identity.priorities.copy(),
+                        "dataset": dataset, "seed": seed,
+                        "method": method, "gate_mode": gate_mode,
+                        "schedule": schedule, "epochs": epochs,
+                    }, output / "final_checkpoint.pt")
         finally:
             identity.close()
     elapsed = time.perf_counter() - started
+    try:
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL,
+            text=True).strip()
+    except (OSError, subprocess.CalledProcessError):
+        source_sha = "unknown"
     manifest = {
         "schema": "controlled_awn_bt_v1",
+        "git_sha": source_sha, "save_model": bool(save_model),
+        "checkpoint_path": str(output / "final_checkpoint.pt") if save_model else None,
+        "active_neuron_ids": tracker.snapshot(),
+        "active_gate_priorities": identity.priorities.copy(),
+        "max_calibration_batches": max_calibration_batches,
         "dataset": dataset, "seed": seed, "method": method,
         "gate_mode": gate_mode, "schedule": schedule, "epochs": epochs,
         "fixed_epochs": sorted(fixed), "max_interventions": max_interventions,
@@ -399,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--learning-rate", type=float, default=0.01)
     parser.add_argument("--max-calibration-batches", type=int)
+    parser.add_argument("--save-model", action="store_true")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     fixed = tuple(int(x) for x in args.fixed_epochs.split(",") if x.strip())
@@ -408,7 +432,8 @@ def main(argv: list[str] | None = None) -> int:
         epochs=args.epochs or DEFAULT_EPOCHS[args.dataset], output=args.output,
         fixed_epochs=fixed, max_interventions=args.max_interventions,
         device=args.device, learning_rate=args.learning_rate,
-        max_calibration_batches=args.max_calibration_batches)
+        max_calibration_batches=args.max_calibration_batches,
+        save_model=args.save_model)
     print(json.dumps({k: result[k] for k in (
         "dataset", "seed", "method", "gate_mode", "schedule",
         "optimizer_steps", "final_width", "final_test_accuracy",
