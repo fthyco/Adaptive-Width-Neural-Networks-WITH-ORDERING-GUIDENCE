@@ -66,7 +66,8 @@ def run_suite(output: Path, datasets: list[str], seeds: list[int],
               max_interventions: int = 2, device: str = "cpu",
               learning_rate: float = 0.01,
               max_calibration_batches: int | None = None,
-              resume: bool = False, keep_going: bool = False) -> dict:
+              resume: bool = False, keep_going: bool = False,
+              save_model: bool = False) -> dict:
     if len(seeds) != len(set(seeds)) or not seeds:
         raise ValueError("Seeds must be nonempty unique integers")
     sha = git_sha()
@@ -77,6 +78,7 @@ def run_suite(output: Path, datasets: list[str], seeds: list[int],
         "fixed_epochs": fixed_epochs, "max_interventions": max_interventions,
         "device": device, "learning_rate": learning_rate,
         "max_calibration_batches": max_calibration_batches,
+        "save_model": save_model,
         "note": "Train from scratch for every configuration; only fixed schedules are event-matched",
     }
     rows, failures = [], []
@@ -96,7 +98,10 @@ def run_suite(output: Path, datasets: list[str], seeds: list[int],
                             keys = {"dataset": dataset, "seed": seed, "schedule": schedule,
                                     "method": method, "gate_mode": mode, "epochs": epochs,
                                     "learning_rate": learning_rate, "device": device,
-                                    "max_interventions": max_interventions}
+                                    "max_interventions": max_interventions,
+                                    "max_calibration_batches": max_calibration_batches,
+                                    "save_model": save_model, "git_sha": sha,
+                                    "fixed_epochs": sorted(fixed_epochs)}
                             if any(rec.get(k) != v for k, v in keys.items()):
                                 raise ValueError("Existing manifest config mismatch; refuse stale resume")
                         else:
@@ -105,7 +110,8 @@ def run_suite(output: Path, datasets: list[str], seeds: list[int],
                                 schedule=schedule, epochs=epochs, output=path,
                                 fixed_epochs=fixed_epochs, max_interventions=max_interventions,
                                 device=device, learning_rate=learning_rate,
-                                max_calibration_batches=max_calibration_batches)
+                                max_calibration_batches=max_calibration_batches,
+                                save_model=save_model)
                         row = {
                             "dataset": dataset, "seed": seed, "schedule": schedule,
                             "method": method, "gate_mode": mode, "epochs": epochs,
@@ -156,6 +162,7 @@ def main(argv=None) -> int:
     p.add_argument("--max-calibration-batches", type=int)
     p.add_argument("--resume", action="store_true")
     p.add_argument("--keep-going", action="store_true")
+    p.add_argument("--save-model", action="store_true")
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args(argv)
     datasets = _names(args.datasets, sorted(DEFAULT_EPOCHS))
@@ -170,7 +177,8 @@ def main(argv=None) -> int:
         max_interventions=args.max_interventions, device=args.device,
         learning_rate=args.learning_rate,
         max_calibration_batches=args.max_calibration_batches,
-        resume=args.resume, keep_going=args.keep_going)
+        resume=args.resume, keep_going=args.keep_going,
+        save_model=args.save_model)
     print(json.dumps(result, indent=2))
     return int(result["failures"] != 0)
 
