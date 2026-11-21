@@ -25,7 +25,7 @@ jobs:
       - name: Install PyTorch CPU and AWN dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
           python -m pip install mlwiz==1.7.8 torch-geometric==2.8.1 numpy pytest
       - name: Native AWN G0, real optimizer and width migration
         run: |
