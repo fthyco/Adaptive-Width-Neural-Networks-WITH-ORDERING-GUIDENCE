@@ -1,52 +1,57 @@
-# G5A — Predecision Evidence / Proposed-Change Feature Ablation
+# G5A — Evidence-Aware Action-Value Ablation (Fresh Same-Checkpoint Design)
 
-Status: exploratory research extension, distinct from immutable G4 prospective confirmation.
+Status: implementation + new-seed exploratory evaluation. G4 frozen confirmation is unchanged.
 
-## Question
+## Why we rejected historical G2 replay
 
-Does giving the action-value regressor direct access to the *proposed
-structural change* improve held-out prediction and action choice compared
-with original G3 features (epoch, width, training and validation history)?
+An initial G2 feature-only replay was proposed to recover feature vectors
+after the original labels existed. Although all Spiral cohorts matched, the
+SpiralHard baselines differed numerically from the original G2 trajectories
+(e.g., rate 0.0256877 vs 0.0256082 at epoch 20). Those states are
+**not identical counterfactual contexts**. We explicitly rejected
+pairing such features with G2 labels. There is no tolerance relaxation
+or selective seed exclusion. Failed G5A historical-replay CI:
+[run 44856367948](https://github.com/fthyco/Adaptive-Width-Neural-Networks-WITH-ORDERING-GUIDENCE/actions/runs/44856367948).
 
-## Frozen measurement design
+## New G5A experimental design
 
-- Historical teacher targets: exact, previously audited G2 H8 paired labels
-  (source commit `ffb347214a86e4fbf92912ff2bf4dac54039edd5`, run
-  `44848340275`). Do not create new labels or use G4 outcome labels.
-- Feature replay: independently train original, unmodified AWN baselines
-  on G2's Spiral/SpiralHard and seeds 42/123/456. Verify each replayed
-  checkpoint state against original G2 to 1e-5 relative, 1e-6 absolute;
-  exact identity, width and step matching are mandatory. Abort on mismatch.
-- Proposed actions (exactly G2): deterministic random positional order,
-  weight-magnitude positional order, gradient-sensitivity positional order.
-- New pre-action features: normalized rank displacement, fraction of the
-  AWN learned prefix replaced for each proposed action; top-quartile share
-  of nonnegative W/G evidence. No future loss or outcome is used to compute them.
-- The learned width at this checkpoint defines the prefix. When the
-  learned width equals physical width, prefix replacement is zero.
-- Both baseline G3 and augmented G5A use **fixed alpha=12 multioutput Ridge**
-  with identical targets, unpenalized intercept and train-only standardization.
-  The alpha is not selected based on G4 or G5 outcomes.
-- Same leave-one-seed-out and leave-one-dataset-out fold membership.
-  In all folds whole trajectories, not checkpoints, are held out.
-- Compare held-out paired policy net value vs SKIP and baseline G3,
-  decision counts and action-wise MAE. Report both positive and negative
-  values. No post-hoc feature selection or threshold tuning.
-- No final test fold data, no optimizer steps beyond original baseline,
-  no mutated AWN or G4 artifacts.
+- **Datasets:** Spiral, SpiralHard.
+- **Fresh seeds:** 20331, 20332, 20333. None are G2 or G4 seeds.
+- **Checkpoints:** epochs 5,10,20,35 on uninterrupted original AWN.
+- **Actions:** SKIP, random positional, weight positional, gradient positional.
+- **Matched future budget:** 8 optimizer steps, intermediate H=1,4,8.
+- **Paired labels:** CE_H(skip) - CE_H(action) - 0.01 * incremental action online seconds.
+- **96 treatment continuations**, **288 audited observations** over 24 checkpoints.
+- **Before any intervention:** measure W and G evidence on the frozen
+  calibration fold of a copied native-AWN checkpoint; compute the exact
+  deterministic random ordering; save eight features for the proposed
+  permutations. These feature records are written before any future
+  training examples or counterfactual outcomes are generated.
+- **Same checkpoint identity:** future action forks restore the *same*
+  in-memory captured model + optimizer + RNG snapshot from which
+  the evidence was computed. No cross-run model-state matching.
+- **Model comparison:** 10-feature G3 Ridge architecture vs 18-feature
+  evidence-aware Ridge architecture. Both **retrained only on training
+  groups** of the same leave-one-seed-out / leave-one-dataset-out
+  splits, with fixed alpha=12 and zero intervention threshold. We
+  compare net value, action-wise MAE, and action choices.
+- **No final test examples** for teacher labels or feature selection.
 
-## Interpretation and limitations
+## Interpretation limits
 
-This is **retrospective, exploratory G2 feature ablation**, not a new-seed
-confirmation. The G2 label set was already observed when designing the
-feature test, so results cannot prove unbiased generalization or novelty.
-The effective historical units are only six training trajectories, and
-adding eight features can overfit. Any positive G5A result requires a
-new prospective study with frozen trained coefficients, untouched seeds,
-prepublished decisions and paired outcome measurements, with the cost
-of computing gradient evidence included in online cost.
+This is a fresh-cohort, same-checkpoint **exploratory ablation**, NOT
+prospective confirmation of a previously trained evidence-aware policy.
+The previous G3 coefficients are not evaluated as the baseline; only
+the G3 *architecture* is fitted on the same training fold for fairness.
 
-Feature collection in G5A replays the frozen historical checkpoints to
-recover information not preserved in the original G2 report. It must
-never silently pair different network states. A mismatch invalidates
-this replay method and requires redesign rather than tolerance hunting.
+The original G4 results and locked model are unaffected. G5A still
+uses just two related synthetic tasks, three independent seeds, and a
+short 8-step horizon. The target includes the action-specific evidence
+and intervention time recorded in each fork, but the cost of computing
+the additional predecision G/W descriptors **for every decision** has
+not been charged to the G5A policy. Therefore a positive value
+difference would NOT prove end-to-end deployment superiority.
+
+A final positive claim requires a later prospectively locked model on
+untouched seeds/tasks, prepublished predictions, full feature-compute
+and controller overhead, and paired independent outcomes.
