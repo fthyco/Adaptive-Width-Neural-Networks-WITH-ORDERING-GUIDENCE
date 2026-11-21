@@ -1,7 +1,7 @@
 """Run real intermediate-horizon endpoints from independent checkpoint forks."""
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Callable, Protocol, Sequence
@@ -107,7 +107,10 @@ def paired_rollouts(
             torch.cuda.manual_seed_all(rollout_seed)
         adapter = adapter_factory(restored)
         ledger = OnlineCostLedger()
-        with adapter.scope(action.gate_mode):
+        # Skip is the untouched AWN baseline: do not instrument/monkeypatch
+        # identity or gate behavior, even temporarily.
+        context = nullcontext() if action.kind is ActionKind.SKIP else adapter.scope(action.gate_mode)
+        with context:
             before, duration = _time(adapter.device, adapter.validation_risk)
             ledger.evaluation_seconds += duration
             effect = adapter.apply(action)
