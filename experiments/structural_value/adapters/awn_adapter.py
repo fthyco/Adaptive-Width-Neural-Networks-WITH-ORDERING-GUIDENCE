@@ -88,10 +88,10 @@ class AWNAdapter:
         return (int(self.model.variational_Ws[0].compute_truncation_number()),)
 
     def apply(self, action: ActionSpec) -> ActionMeasurement:
-        from experiments.bottleneck_triggered.evidence_sweep.controlled_bt import (
-            apply_intervention, candidate_order, evidence_scores)
         if action.kind is ActionKind.SKIP:
             return ActionMeasurement(no_op=True)
+        from experiments.bottleneck_triggered.evidence_sweep.controlled_bt import (
+            apply_intervention, candidate_order, evidence_scores)
         if action.kind in (ActionKind.RESIZE, ActionKind.JOINT):
             raise NotImplementedError("Resize and joint are reserved for G4/G5")
         if self.identity is None:
