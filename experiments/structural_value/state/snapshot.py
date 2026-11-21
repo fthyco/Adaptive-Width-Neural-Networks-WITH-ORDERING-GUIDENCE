@@ -1,9 +1,10 @@
-"""In-memory full-state forks for one-process deterministic experiments.
+"""Restorable in-memory checkpoint for deterministic AWN research forks.
 
-The model and optimizer are deep-copied *together*, preserving shared parameter
-references even when AWN has dynamically replaced layer parameters. Snapshots
-must be taken outside temporary gate/width monkeypatch contexts. Explicit
-recorded minibatch streams are the authoritative paired rollout input.
+The model and optimizer are deep-copied *in one object graph*, preserving
+parameter references and optimizer state across dynamic-width replacements.
+The original AWN qW_probs cache may contain non-leaf autograd tensors, which
+cannot be deep-copied by PyTorch. It is a derived forward cache, not a trainable
+state; detach it only during copy, then restore the original object unchanged.
 """
 from __future__ import annotations
 
@@ -60,14 +61,28 @@ class TrainingSnapshot:
                 provenance: Any = None) -> "TrainingSnapshot":
         loader_states = {name: gen.get_state().clone()
                          for name, gen in _generators(loader).items()}
-        # Deep-copy a single object graph: optimizer.state uses Parameter keys.
-        bundle = copy.deepcopy(ForkState(model, optimizer, scheduler, scaler,
-                                         history, identity, provenance))
-        return cls(bundle, random.getstate(), copy.deepcopy(np.random.get_state()),
-                   torch.random.get_rng_state().clone(),
-                   tuple(state.clone() for state in torch.cuda.get_rng_state_all())
-                   if torch.cuda.is_available() else (),
-                   loader_states)
+        py_rng = random.getstate()
+        np_rng = copy.deepcopy(np.random.get_state())
+        torch_rng = torch.random.get_rng_state().clone()
+        cuda_rng = (tuple(state.clone() for state in torch.cuda.get_rng_state_all())
+                    if torch.cuda.is_available() else ())
+        # AWN.qW_probs is derived on every AWN.forward and often has a grad_fn.
+        # PyTorch forbids deepcopy(non-leaf Tensor). Do not detach the real
+        # cache permanently, and do not mutate trainable parameters.
+        old_cache = getattr(model, "qW_probs", None)
+        is_awn_cache = hasattr(model, "qW_probs")
+        if is_awn_cache:
+            if not isinstance(old_cache, (tuple, list)):
+                raise TypeError("Unsupported qW_probs cache shape")
+            model.qW_probs = [p.detach().clone() for p in old_cache]
+        try:
+            bundle = copy.deepcopy(ForkState(model, optimizer, scheduler, scaler,
+                                             history, identity, provenance))
+        finally:
+            if is_awn_cache:
+                model.qW_probs = old_cache
+
+        return cls(bundle, py_rng, np_rng, torch_rng, cuda_rng, loader_states)
 
     def restore_rng(self, loader: Any = None) -> None:
         random.setstate(self.python_rng)
@@ -86,8 +101,6 @@ class TrainingSnapshot:
 
     def fork(self, *, loader: Any = None) -> ForkState:
         cloned = copy.deepcopy(self.state)
-        # Some AWN entrypoints store their optimizer on the model; make the
-        # relationship explicit even if an upstream deepcopy changes it.
         if hasattr(cloned.model, "torch_optimizer"):
             cloned.model.torch_optimizer = cloned.optimizer
         self.restore_rng(loader)
