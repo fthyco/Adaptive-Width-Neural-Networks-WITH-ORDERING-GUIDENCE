@@ -1,14 +1,9 @@
 name: Structural value G4 new-seed confirmation
 
+# Original G4 preregistration run 44850446436 has already committed all
+# 24 predictions. Re-running Stage A after observing some Stage B outcomes
+# would compromise prospective validity. Retain only manual invocation.
 on:
-  push:
-    branches: ["feat/structural-value-counterfactual-pilot"]
-    paths:
-      - "experiments/structural_value/g4_contract.py"
-      - "experiments/structural_value/g4_frozen_policy.py"
-      - "experiments/structural_value/scripts/g4_*.py"
-      - "experiments/structural_value/tests/test_g4_lock.py"
-      - ".github/workflows/structural-value-g4-confirmation.yml"
   workflow_dispatch:
 
 permissions:

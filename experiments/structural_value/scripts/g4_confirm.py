@@ -22,8 +22,9 @@ from ..counterfactual.label_builder import build_labels
 from ..g4_contract import (
     DATASETS, SEEDS, CHECKPOINTS, HORIZONS, HORIZON_STEPS, ACTIONS,
     COST_WEIGHT, REFERENCE_SECONDS, G3_SOURCE_RUN, G3_SOURCE_ARTIFACT_ID,
+    G4_ORIGINAL_PRECOMMIT_SHA,
 )
-from ..g4_frozen_policy import FrozenPolicy, _json_sha
+from ..g4_frozen_policy import FrozenPolicy, _json_sha, verify_precommitted_prediction
 from ..state.snapshot import TrainingSnapshot
 from .audit_pilot import audit_pilot
 from .pilot import _atomic_jsonl, _git_sha, future_batches
@@ -50,7 +51,8 @@ def verify_precommit(pre: dict, input_dir: Path, *,
             or design["reference_seconds"] != REFERENCE_SECONDS
             or design["source_g3_run"] != G3_SOURCE_RUN
             or design["source_g3_artifact_id"] != G3_SOURCE_ARTIFACT_ID
-            or design["source_commit"] != current_git_sha
+            or design["source_commit"] != G4_ORIGINAL_PRECOMMIT_SHA
+            or len(current_git_sha) != 40
             or design["test_examples_for_labels"] != 0
             or design["learning_rate"] != 0.01
             or design["device"] != "cpu"):
@@ -108,10 +110,10 @@ def verify_precommit(pre: dict, input_dir: Path, *,
                 or state["training_steps_so_far"] != sum(
                     h["training_steps"] for h in history[:epoch])):
             raise AssertionError("Prediction state did not come from prior baseline")
-        expected_action, expected_values = policy.action(state, dataset=design["dataset"])
-        if (d["predicted_action"] != expected_action
-                or d["predicted_net_value"] != expected_values):
-            raise AssertionError("Prospective action was changed after prediction")
+        verify_precommitted_prediction(
+            policy, state=state, dataset=design["dataset"],
+            recorded_action=d["predicted_action"],
+            recorded_values=d["predicted_net_value"])
         filename = f"epoch{epoch:04d}.pt"
         path = input_dir / filename
         if d["snapshot_file"] != filename or not path.is_file():
@@ -243,7 +245,9 @@ def confirm(*, source: Path, output: Path) -> dict:
     shutil.copyfile(precommit_path, output / "precommit_original.json")
     result = {
         "schema": "awn_structural_value_g4_confirmation_v1",
-        "source_commit": git_sha, "source_precommit_sha256": file_sha(precommit_path),
+        "source_commit": pre["design"]["source_commit"],
+        "confirmation_engine_sha": git_sha,
+        "source_precommit_sha256": file_sha(precommit_path),
         "source_g3_run": G3_SOURCE_RUN,
         "source_g3_artifact_id": G3_SOURCE_ARTIFACT_ID,
         "frozen_model_sha256": policy.model_sha256,

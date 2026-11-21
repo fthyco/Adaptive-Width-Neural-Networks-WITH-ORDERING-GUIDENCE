@@ -11,7 +11,7 @@ from experiments.structural_value.g4_contract import (
     G3_SOURCE_RUN, G3_SOURCE_ARTIFACT_ID,
 )
 from experiments.structural_value.g4_frozen_policy import (
-    load_frozen_policy, _json_sha,
+    load_frozen_policy, _json_sha, verify_precommitted_prediction,
 )
 from experiments.structural_value.scripts.value_predictor import (
     FEATURE_NAMES, STATE_KEYS, RIDGE_ALPHA, TARGET_ACTIONS, SOURCE_GRID_SHA,
@@ -143,3 +143,35 @@ def test_policy_action_is_independent_of_any_new_seed_or_observed_label(tmp_path
     assert first == second
     assert set(first[1]) == set(TARGET_ACTIONS)
     assert set(state) == set(STATE_KEYS)
+
+
+
+def test_serialized_float64_reduction_noise_does_not_change_precommitted_action(tmp_path):
+    policy = load_frozen_policy(_write(tmp_path / "frozen.json", _g3_payload()))
+    state = _valid_state()
+    action, estimated = policy.action(state, dataset="Spiral")
+    slightly_different = dict(estimated)
+    slightly_different["random_positional"] += 1e-14
+    verify_precommitted_prediction(
+        policy, state=state, dataset="Spiral",
+        recorded_action=action, recorded_values=slightly_different)
+
+
+@pytest.mark.parametrize("corruption", ["action", "large_number", "missing_target", "nan"])
+def test_frozen_numeric_verifier_still_fails_closed(tmp_path, corruption):
+    policy = load_frozen_policy(_write(tmp_path / "g3.json", _g3_payload()))
+    state = _valid_state()
+    action, values = policy.action(state, dataset="Spiral")
+    values = dict(values)
+    if corruption == "action":
+        action = "skip"
+    elif corruption == "large_number":
+        values["weight_positional"] += 1e-9
+    elif corruption == "missing_target":
+        values.pop("gradient_positional")
+    elif corruption == "nan":
+        values["random_positional"] = float("nan")
+    with pytest.raises(AssertionError):
+        verify_precommitted_prediction(
+            policy, state=state, dataset="Spiral",
+            recorded_action=action, recorded_values=values)

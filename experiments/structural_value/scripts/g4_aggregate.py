@@ -7,10 +7,12 @@ import json
 import math
 from pathlib import Path
 import statistics
+import subprocess
 
 from ..g4_contract import (
     DATASETS, SEEDS, CHECKPOINTS, HORIZONS, ACTIONS, HORIZON_STEPS,
     COST_WEIGHT, REFERENCE_SECONDS, G3_SOURCE_RUN, G3_SOURCE_ARTIFACT_ID,
+    G4_ORIGINAL_PRECOMMIT_SHA,
 )
 from ..g4_frozen_policy import _json_sha
 from .audit_pilot import audit_pilot
@@ -42,6 +44,9 @@ def collect(root: Path) -> tuple[list[dict], dict]:
     summary_groups = []
     provenance_sha = set()
     policy_sha = set()
+    confirmation_engines = set()
+    current_engine_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], text=True).strip()
     checkpoint_ids = set()
     for ds, seed in sorted(expected):
         folder = Path(root) / f"g4_{ds}_seed{seed}"
@@ -49,6 +54,11 @@ def collect(root: Path) -> tuple[list[dict], dict]:
         precommit_file = folder / "precommit_original.json"
         pre = json.loads(precommit_file.read_text(encoding="utf-8"))
         design = pre["design"]
+        engine_sha = report.get("confirmation_engine_sha", report["source_commit"])
+        if (report["source_commit"] != G4_ORIGINAL_PRECOMMIT_SHA
+                or engine_sha not in (G4_ORIGINAL_PRECOMMIT_SHA, current_engine_sha)):
+            raise AssertionError("Unapproved precommit or confirmation code revision")
+        confirmation_engines.add(engine_sha)
         if (report.get("schema") != "awn_structural_value_g4_confirmation_v1"
                 or not report["passed"] or report["dataset"] != ds
                 or report["seed"] != seed or not len(report["checkpoint_results"]) == 4
@@ -102,7 +112,7 @@ def collect(root: Path) -> tuple[list[dict], dict]:
                     or manifest["precommitted_action"] != result["precommitted_action"]
                     or manifest["precommit_model_sha256"] != report["frozen_model_sha256"]
                     or manifest["decision_state"] != decision["state"]
-                    or manifest["config"]["git_sha"] != report["source_commit"]):
+                    or manifest["config"]["git_sha"] != engine_sha):
                 raise AssertionError("Raw observed checkpoint or locked action mismatched")
             refreshed = audit_pilot(cp_dir)
             stored = json.loads((cp_dir / "audit.json").read_text(encoding="utf-8"))
@@ -171,6 +181,7 @@ def collect(root: Path) -> tuple[list[dict], dict]:
     return decisions, {
         "source_commit": next(iter(provenance_sha)),
         "frozen_model_sha256": next(iter(policy_sha)),
+        "confirmation_engine_shas": sorted(confirmation_engines),
         "groups": summary_groups,
     }
 

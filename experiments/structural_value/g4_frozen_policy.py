@@ -76,3 +76,28 @@ def load_frozen_policy(path: Path) -> FrozenPolicy:
         raise AssertionError("G3 model parameters corrupted")
     model = ValueModel(mean, std, beta)
     return FrozenPolicy(model, _json_sha(candidate), G3_SOURCE_RUN)
+
+
+def verify_precommitted_prediction(
+        policy: FrozenPolicy, *, state: dict, dataset: str,
+        recorded_action: str, recorded_values: dict,
+        absolute_tolerance: float = 1e-12) -> None:
+    """Only float64 serialization/reduction noise is tolerated, not action drift.
+
+    The chosen action must match EXACTLY. Tolerance is 10^(-12) net
+    CE units, orders of magnitude below the declared G4 effect scale.
+    """
+    expected_action, expected_values = policy.action(state, dataset=dataset)
+    if recorded_action != expected_action:
+        raise AssertionError(
+            f"Precommitted action changed: {recorded_action} vs {expected_action}")
+    if (not isinstance(recorded_values, dict)
+            or set(recorded_values) != set(expected_values)):
+        raise AssertionError("Precommitted predicted target keys changed")
+    for action, expected in expected_values.items():
+        actual = recorded_values[action]
+        if (isinstance(actual, bool) or not isinstance(actual, (float, int))
+                or not np.isfinite(actual)
+                or abs(float(actual) - expected) > absolute_tolerance):
+            raise AssertionError(
+                f"Precommitted predicted number changed beyond numerical tolerance: {action}")
