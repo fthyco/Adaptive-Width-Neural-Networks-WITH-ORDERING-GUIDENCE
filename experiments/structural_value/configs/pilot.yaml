@@ -1,14 +1,20 @@
-# Engineering-only; no untouched final seeds or test-based tuning.
+# Predeclared, bounded engineering grid. Not a confirmatory experiment.
 datasets: [Spiral, SpiralHard]
 seeds: [42, 123, 456]
-checkpoint_selection: history_only_predeclared
-checkpoint_strata: [early, pre_plateau, plateau, late]
+checkpoint_selection: fixed_epoch_positions_without_validation_tuning
+checkpoint_epochs: [5, 10, 20, 35]
+checkpoint_strata: [early, developing, middle, late]  # Temporal, not certified plateaus
 actions: [skip, random_positional, weight_positional, gradient_positional]
-control_gate_mode: neuron_coupled
+control_gate_mode: neuron_coupled  # G1 integrity control, not grid96 action
 treatment_gate_mode: positional
-horizon_equivalent_epochs: 5
+horizon_optimizer_steps: 8
+intermediate_horizons: [1, 4, 8]
 rollout_replicates: 1
+expected_final_horizon_rollouts: 96
+expected_intermediate_observations: 288
 primary_risk: development_validation_cross_entropy
 primary_online_cost: synchronized_wall_seconds
+cost_weight: 0.01
+reference_seconds: 1.0
 no_op_policy: flag_and_exclude_from_intervention_effect_claims
 final_test_used_for_labels: false
