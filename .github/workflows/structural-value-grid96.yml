@@ -1,0 +1,99 @@
+name: Structural value grid96 reference AWN
+
+on:
+  push:
+    branches: ["feat/structural-value-counterfactual-pilot"]
+    paths:
+      - "experiments/structural_value/grid_contract.py"
+      - "experiments/structural_value/scripts/run_grid.py"
+      - "experiments/structural_value/scripts/audit_grid.py"
+      - "experiments/structural_value/scripts/aggregate_grid.py"
+      - "experiments/structural_value/tests/test_grid_aggregation.py"
+      - ".github/workflows/structural-value-grid96.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: structural-value-grid96-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  grid-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test grid arithmetic and fail-closed aggregation
+        run: |
+          python -m pip install pytest
+          python -m compileall -q experiments/structural_value
+          python -m pytest -q experiments/structural_value/tests/test_grid_aggregation.py
+
+  reference-awn-grid:
+    needs: grid-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        dataset: [Spiral, SpiralHard]
+        seed: [42, 123, 456]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch matching torchvision and reference AWN dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+          python -m pip install mlwiz==1.7.8 torch-geometric==2.8.1 numpy pytest
+          python -m pip install h5py datasets==3.6.0 transformers==4.57.6 openml==0.15.1 openml-pytorch==0.1.7 ucimlrepo==0.0.7
+      - name: Train one native AWN baseline and run four checkpoint forks
+        run: |
+          python -m experiments.structural_value.scripts.run_grid \
+            --dataset ${{ matrix.dataset }} --seed ${{ matrix.seed }} \
+            --output outputs/structural_value/grid_${{ matrix.dataset }}_seed${{ matrix.seed }}
+      - name: Verify entire per-seed checkpoint/action/label grid
+        run: |
+          python -m experiments.structural_value.scripts.audit_grid \
+            --input outputs/structural_value/grid_${{ matrix.dataset }}_seed${{ matrix.seed }} \
+            --output outputs/structural_value/grid_${{ matrix.dataset }}_seed${{ matrix.seed }}/grid_audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: awn-grid96-${{ matrix.dataset }}-seed${{ matrix.seed }}
+          path: outputs/structural_value/
+          if-no-files-found: warn
+          retention-days: 30
+
+  aggregate:
+    needs: reference-awn-grid
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: awn-grid96-*
+          path: outputs/structural_value
+          merge-multiple: true
+      - name: Fail-closed 96-rollout completeness and group-level descriptive analysis
+        run: |
+          python -m experiments.structural_value.scripts.aggregate_grid \
+            --root outputs/structural_value \
+            --output outputs/structural_value/grid96_aggregate.json
+          python -c "import json; d=json.load(open('outputs/structural_value/grid96_aggregate.json')); print(json.dumps(d['descriptive_summaries'], indent=2))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awn-grid96-complete-aggregate
+          path: outputs/structural_value/grid96_aggregate.json
+          if-no-files-found: error
+          retention-days: 90
