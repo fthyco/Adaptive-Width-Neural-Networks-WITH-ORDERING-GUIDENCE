@@ -1,13 +1,16 @@
-name: Structural value G5A evidence-aware feature ablation
+name: Structural value G5A fresh same-checkpoint evidence ablation
 
 on:
   push:
     branches: ["feat/structural-value-counterfactual-pilot"]
     paths:
       - "experiments/structural_value/g5_evidence_features.py"
-      - "experiments/structural_value/scripts/g5_feature_replay.py"
+      - "experiments/structural_value/g5_fresh_contract.py"
+      - "experiments/structural_value/scripts/g5_same_checkpoint_study.py"
+      - "experiments/structural_value/scripts/g5_fresh_ablation.py"
       - "experiments/structural_value/scripts/g5_evidence_ablation.py"
       - "experiments/structural_value/tests/test_g5_evidence.py"
+      - "experiments/structural_value/tests/test_g5_fresh_study.py"
       - "experiments/structural_value/G5_EVIDENCE_AWARE_ABLATION.md"
       - ".github/workflows/structural-value-g5-evidence-ablation.yml"
   workflow_dispatch:
@@ -25,22 +28,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify new features, identity joins and no-future-label contract
+      - name: Verify predecision feature and grouped-fold contracts
         run: |
           python -m pip install numpy pytest
           python -m compileall -q experiments/structural_value
-          python -m pytest -q experiments/structural_value/tests/test_g5_evidence.py
+          python -m pytest -q experiments/structural_value/tests/test_g5_evidence.py experiments/structural_value/tests/test_g5_fresh_study.py
 
-  replay-only-historical-checkpoints:
+  fresh-same-checkpoint-cohorts:
     needs: contract-tests
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
         dataset: [Spiral, SpiralHard]
-        seed: [42, 123, 456]
+        seed: [20331, 20332, 20333]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,29 +55,21 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
           python -m pip install mlwiz==1.7.8 torch-geometric==2.8.1 numpy
           python -m pip install h5py datasets==3.6.0 transformers==4.57.6 openml==0.15.1 openml-pytorch==0.1.7 ucimlrepo==0.0.7
-      - name: Retrieve original audited G2 checkpoint metadata
-        uses: actions/download-artifact@v4
-        with:
-          run-id: 44848340275
-          github-token: ${{ github.token }}
-          name: awn-grid96-${{ matrix.dataset }}-seed${{ matrix.seed }}
-          path: outputs/original
-      - name: Replay identical AWN checkpoint states and measure predecision proposals
+      - name: Capture proposed evidence and exact-checkpoint paired future labels
         run: |
-          python -m experiments.structural_value.scripts.g5_feature_replay \
+          python -m experiments.structural_value.scripts.g5_same_checkpoint_study \
             --dataset ${{ matrix.dataset }} --seed ${{ matrix.seed }} \
-            --audit-file outputs/original/grid_${{ matrix.dataset }}_seed${{ matrix.seed }}/grid_audit.json \
-            --output outputs/features/g5_${{ matrix.dataset }}_seed${{ matrix.seed }}
-      - name: Publish preaction feature artifacts independently of teacher labels
+            --output outputs/g5/g5_${{ matrix.dataset }}_seed${{ matrix.seed }}
+      - name: Publish raw paired experiment, before-action records and audits
         uses: actions/upload-artifact@v4
         with:
-          name: g5-feature-${{ matrix.dataset }}-seed${{ matrix.seed }}
-          path: outputs/features/
+          name: g5-cohort-${{ matrix.dataset }}-seed${{ matrix.seed }}
+          path: outputs/g5/
           if-no-files-found: error
           retention-days: 90
 
-  paired-offline-ablation:
-    needs: replay-only-historical-checkpoints
+  paired-group-heldout-ablation:
+    needs: fresh-same-checkpoint-cohorts
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -82,32 +77,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify predictor and join contracts
+      - name: Verify zero future-label leakage and matched baseline contract
         run: |
           python -m pip install numpy pytest
-          python -m pytest -q experiments/structural_value/tests/test_g5_evidence.py experiments/structural_value/tests/test_value_predictor.py
-      - name: Retrieve six historical G2 paired-label audits
+          python -m pytest -q experiments/structural_value/tests/test_g5_evidence.py experiments/structural_value/tests/test_g5_fresh_study.py experiments/structural_value/tests/test_value_predictor.py
+      - name: Retrieve all fresh G5A cohorts with preaction and raw outcome data
         uses: actions/download-artifact@v4
         with:
-          run-id: 44848340275
-          github-token: ${{ github.token }}
-          pattern: awn-grid96-*
-          path: outputs/g2
+          pattern: g5-cohort-*
+          path: outputs/g5/
           merge-multiple: true
-      - name: Retrieve all six preintervention feature-only replays
-        uses: actions/download-artifact@v4
-        with:
-          pattern: g5-feature-*
-          path: outputs/g5
-          merge-multiple: true
-      - name: Compare G3 vs G5A under identical group-heldout folds
+      - name: Independently re-audit raw forks and compare both predictor designs
         run: |
-          python -m experiments.structural_value.scripts.g5_evidence_ablation \
-            --g2-root outputs/g2 --features-root outputs/g5 \
-            --output outputs/results/g5a_evidence_ablation.json
+          python -m experiments.structural_value.scripts.g5_fresh_ablation \
+            --root outputs/g5 --output outputs/results/g5a_fresh_evidence_ablation.json
       - uses: actions/upload-artifact@v4
         with:
-          name: awn-g5a-evidence-aware-exploratory-ablation
-          path: outputs/results/g5a_evidence_ablation.json
+          name: awn-g5a-fresh-evidence-exploratory-ablation
+          path: outputs/results/g5a_fresh_evidence_ablation.json
           if-no-files-found: error
           retention-days: 90
