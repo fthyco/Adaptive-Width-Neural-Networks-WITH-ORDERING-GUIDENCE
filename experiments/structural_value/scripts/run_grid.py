@@ -22,12 +22,7 @@ from ..counterfactual.label_builder import build_labels
 from ..state.snapshot import TrainingSnapshot
 from .audit_pilot import audit_pilot
 from .pilot import _atomic_jsonl, _git_sha, future_batches
-
-DATASETS = ("Spiral", "SpiralHard")
-SEEDS = (42, 123, 456)
-CHECKPOINTS = (5, 10, 20, 35)
-HORIZON_STEPS = 8
-HORIZONS = (1, 4, 8)
+from ..grid_contract import DATASETS, SEEDS, CHECKPOINTS, HORIZON_STEPS, HORIZONS
 
 
 def _digest(batches):

@@ -4,7 +4,7 @@ from copy import deepcopy
 import pytest
 
 from experiments.structural_value.scripts.aggregate_grid import aggregate_reports
-from experiments.structural_value.scripts.run_grid import (
+from experiments.structural_value.grid_contract import (
     CHECKPOINTS, DATASETS, SEEDS, HORIZON_STEPS)
 
 

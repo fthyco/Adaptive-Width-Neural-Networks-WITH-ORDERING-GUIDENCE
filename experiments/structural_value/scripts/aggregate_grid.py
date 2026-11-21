@@ -10,9 +10,7 @@ import math
 from pathlib import Path
 import statistics
 
-from .run_grid import CHECKPOINTS, DATASETS, HORIZON_STEPS, SEEDS
-
-ACTIONS = ("skip", "random_positional", "weight_positional", "gradient_positional")
+from ..grid_contract import CHECKPOINTS, DATASETS, HORIZON_STEPS, SEEDS, ACTIONS
 
 
 def aggregate_reports(reports: list[dict]) -> dict:

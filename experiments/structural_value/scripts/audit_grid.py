@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from .audit_pilot import audit_pilot, _finite
-from .run_grid import CHECKPOINTS, DATASETS, HORIZON_STEPS, HORIZONS, SEEDS
+from ..grid_contract import CHECKPOINTS, DATASETS, HORIZON_STEPS, HORIZONS, SEEDS
 
 
 def audit_grid(folder: Path) -> dict:
