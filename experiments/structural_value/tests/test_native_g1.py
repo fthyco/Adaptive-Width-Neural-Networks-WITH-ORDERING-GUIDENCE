@@ -11,6 +11,7 @@ def test_native_awn_actions_and_matched_labels(seed):
     assert report["paired_action_count"] == 7
     assert report["paired_observations"] == 21
     assert len(report["native_actions"]) == 6
+    assert len(report["coupled_future_risk_differences"]) >= 3
     assert all(r["optimizer_migration"] == "exact"
                for r in report["native_actions"])
     assert all(r["immediate_logit_max_diff"] < 1e-4

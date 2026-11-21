@@ -222,6 +222,7 @@ def verify_native_g1(seed=42):
     labels = build_labels(paired, cost_weight=0.0, reference_seconds=1.0)
     if len(paired) != len(paired_actions) * 3 or len(labels) != len(paired):
         raise AssertionError("Paired action grid incomplete")
+    coupled_continuation = []
     for horizon in [1, 2, 4]:
         group = [row for row in paired if row.horizon_steps == horizon]
         skip = next(row for row in group if row.action.kind is ActionKind.SKIP)
@@ -234,12 +235,22 @@ def verify_native_g1(seed=42):
                 raise AssertionError("Paired label sign incorrect")
             if label.no_op != row.no_op:
                 raise AssertionError("No-op lost in label serialization")
-        # Coupled permutations are re-labellings when the effective gate is
-        # neuron-coupled; future risk should match skip up to roundoff.
+        # Coupled gates preserve the function immediately after a fixed-width
+        # permutation, NOT necessarily after subsequent native AWN resizing:
+        # rank-dependent truncation can preserve different neuron identities.
+        # A future risk difference is an observed outcome, never an invariant.
         for row in group:
             if row.action.gate_mode == "neuron_coupled" and not row.no_op:
-                if abs(row.validation_risk - skip.validation_risk) > 5e-4:
-                    raise AssertionError("Coupled continuation unexpectedly changed risk")
+                coupled_continuation.append({
+                    "action_id": row.action.action_id,
+                    "action": row.action.kind.value,
+                    "horizon_steps": horizon,
+                    "skip_validation_risk": skip.validation_risk,
+                    "treatment_validation_risk": row.validation_risk,
+                    "delta_risk": skip.validation_risk - row.validation_risk,
+                    "skip_final_widths": list(skip.final_widths),
+                    "treatment_final_widths": list(row.final_widths),
+                })
 
     return {
         "schema": "awn_structural_value_g1_v1",
@@ -250,6 +261,7 @@ def verify_native_g1(seed=42):
         "paired_horizons": [1, 2, 4],
         "paired_action_count": len(paired_actions),
         "paired_observations": len(paired),
+        "coupled_future_risk_differences": coupled_continuation,
         "labels": "matched_sign_and_budget_verified",
         "validation": "synthetic_disjoint_calibration_validation",
         "passed": True,

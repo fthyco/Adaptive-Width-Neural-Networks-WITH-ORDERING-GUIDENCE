@@ -29,7 +29,9 @@ policies but cannot collapse these controls.
   and rollout seed per action, with causal label defined as:
       delta_risk = risk_skip - risk_action
   No positive advantage is presumed.
-- Coupled-mode continuation must remain close to the skip baseline.
+- Coupled-mode *immediate* function preservation is required. Future
+  continuation risk is recorded as an empirical outcome, not forced to
+  match skip: adaptive width truncation can retain different neuron IDs.
 - Validations are performed on two independent synthetic seeds on CPU.
 
 ## Commands
