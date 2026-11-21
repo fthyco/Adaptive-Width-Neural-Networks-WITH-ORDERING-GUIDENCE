@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: g5-feature-${{ matrix.dataset }}-seed${{ matrix.seed }}
-          path: outputs/features/g5_${{ matrix.dataset }}_seed${{ matrix.seed }}
+          path: outputs/features/
           if-no-files-found: error
           retention-days: 90
 
