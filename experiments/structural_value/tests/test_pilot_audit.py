@@ -10,7 +10,8 @@ from experiments.structural_value.actions.action_spec import ActionKind, ActionS
 
 def _valid_dir(tmp_path: Path) -> Path:
     cfg = {"dataset": "Spiral", "seed": 42, "rollout_seed": 99,
-           "cost_weight": 0.1, "reference_seconds": 1.0}
+           "cost_weight": 0.1, "reference_seconds": 1.0,
+           "git_sha": "f" * 40}
     actions = [ActionSpec(ActionKind.SKIP), ActionSpec(ActionKind.WEIGHT_POS)]
     aid = [a.action_id for a in actions]
     manifest = {
