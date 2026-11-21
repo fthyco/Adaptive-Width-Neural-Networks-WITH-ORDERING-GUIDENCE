@@ -149,3 +149,16 @@ def test_replay_must_match_checkpoint_and_never_contain_future_labels(tmp_path, 
     reports = _write_feature_replay(tmp_path, tamper=tamper)
     with pytest.raises(AssertionError):
         join_features(reports, tmp_path)
+
+
+def test_learned_quantile_may_exceed_physical_width_without_fake_neurons():
+    x = proposal_features(
+        w_scores=np.array([1., 2., 3., 4.]),
+        g_scores=np.array([4., 3., 2., 1.]),
+        learned_width=9, random_action_seed=4)
+    assert x["random_prefix_replacement"] == 0.0
+    assert x["weight_prefix_replacement"] == 0.0
+    assert x["gradient_prefix_replacement"] == 0.0
+    with pytest.raises(ValueError):
+        proposal_features(w_scores=np.ones(4), g_scores=np.ones(4),
+                          learned_width=0, random_action_seed=4)

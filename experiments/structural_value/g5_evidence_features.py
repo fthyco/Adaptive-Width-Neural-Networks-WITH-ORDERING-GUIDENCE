@@ -58,9 +58,16 @@ def proposal_features(*, w_scores, g_scores, learned_width: int,
     random_order = np.random.default_rng(int(random_action_seed)).permutation(n).tolist()
     weight_order, wc = evidence_order_and_concentration(w)
     grad_order, gc = evidence_order_and_concentration(g)
-    r_rank, r_prefix = order_features(random_order, n=n, learned_width=learned_width)
-    w_rank, w_prefix = order_features(weight_order, n=n, learned_width=learned_width)
-    g_rank, g_prefix = order_features(grad_order, n=n, learned_width=learned_width)
+    # AWN's target truncation quantile can exceed physical size at a
+    # checkpoint. A positional proposal can only exchange extant neurons.
+    # Preserve the raw learned-width state elsewhere; use available prefix
+    # capacity for this descriptor rather than inventing future neurons.
+    if not isinstance(learned_width, (int, np.integer)) or learned_width < 1:
+        raise ValueError("Invalid learned AWN width")
+    active_prefix = min(int(learned_width), n)
+    r_rank, r_prefix = order_features(random_order, n=n, learned_width=active_prefix)
+    w_rank, w_prefix = order_features(weight_order, n=n, learned_width=active_prefix)
+    g_rank, g_prefix = order_features(grad_order, n=n, learned_width=active_prefix)
     return dict(zip(FEATURE_NAMES, (
         r_rank, r_prefix, w_rank, w_prefix, wc, g_rank, g_prefix, gc,
     )))

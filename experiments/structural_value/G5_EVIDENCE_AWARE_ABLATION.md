@@ -27,7 +27,7 @@ or selective seed exclusion. Failed G5A historical-replay CI:
   deterministic random ordering; save eight features for the proposed
   permutations. These feature records are written before any future
   training examples or counterfactual outcomes are generated.
-- **Same checkpoint identity:** future action forks restore the *same*
+- **Effective prefix semantics:** AWN's quantile-derived learned width may exceed physical\n  hidden size at a checkpoint. A permutation can only move existing neurons,\n  so prefix-replacement features use `min(learned_width, physical_width)`;\n  the original learned-width feature remains unchanged. This is a fixed\n  measurement-contract correction, not a width-learning modification.\n- **Same checkpoint identity:** future action forks restore the *same*
   in-memory captured model + optimizer + RNG snapshot from which
   the evidence was computed. No cross-run model-state matching.
 - **Model comparison:** 10-feature G3 Ridge architecture vs 18-feature
