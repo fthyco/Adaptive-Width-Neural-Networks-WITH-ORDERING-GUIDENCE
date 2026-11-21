@@ -167,7 +167,8 @@ def _run(snapshot, batches, validation, n, *,
         train_examples=n, device=torch.device("cpu"),
         namespace="native-g0-integrity", epoch=2,
     ) if use_adapter else None
-    scope = adapter.scope("positional") if adapter is not None else nullcontext()
+    # A true skip must not install an identity/gate override.
+    scope = nullcontext()
     trace = []
     with scope:
         if adapter is not None:
