@@ -1,0 +1,112 @@
+name: Structural value G4 locked prediction recovery
+
+on:
+  push:
+    branches: ["feat/structural-value-counterfactual-pilot"]
+    paths:
+      - ".github/workflows/structural-value-g4-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verifier-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify numerical tolerance never changes selected actions
+        run: |
+          python -m pip install numpy pytest
+          python -m compileall -q experiments/structural_value
+          python -m pytest -q experiments/structural_value/tests/test_g4_lock.py
+
+  verify-three-failed-groups:
+    needs: verifier-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - dataset: Spiral
+            seed: 20273
+          - dataset: SpiralHard
+            seed: 20271
+          - dataset: SpiralHard
+            seed: 20272
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original native AWN CPU runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+          python -m pip install mlwiz==1.7.8 torch-geometric==2.8.1 numpy
+          python -m pip install h5py datasets==3.6.0 transformers==4.57.6 openml==0.15.1 openml-pytorch==0.1.7 ucimlrepo==0.0.7
+      - name: Recover exact immutable before-outcomes precommit from original G4 run
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 44850446436
+          github-token: ${{ github.token }}
+          name: g4-precommit-${{ matrix.dataset }}-seed${{ matrix.seed }}
+          path: outputs/g4_precommit/g4_${{ matrix.dataset }}_seed${{ matrix.seed }}
+      - name: Apply exact action contract, float tolerance and original snapshot hashes
+        run: |
+          python -m experiments.structural_value.scripts.g4_confirm \
+            --source outputs/g4_precommit/g4_${{ matrix.dataset }}_seed${{ matrix.seed }} \
+            --output outputs/g4_confirmation/g4_${{ matrix.dataset }}_seed${{ matrix.seed }}
+      - name: Publish the only three missing confirmation groups
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: g4_${{ matrix.dataset }}_seed${{ matrix.seed }}
+          path: outputs/g4_confirmation/g4_${{ matrix.dataset }}_seed${{ matrix.seed }}
+          if-no-files-found: warn
+          retention-days: 90
+
+  aggregate-original-plus-recovered:
+    needs: verify-three-failed-groups
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install independent lightweight aggregator
+        run: python -m pip install numpy
+      - name: Download the three already successful original G4 outcomes WITHOUT re-running them
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 44850446436
+          github-token: ${{ github.token }}
+          pattern: g4_*
+          path: outputs/g4_confirmation
+          merge-multiple: false
+      - name: Add only three recovered outcomes, without replacing original successful groups
+        uses: actions/download-artifact@v4
+        with:
+          pattern: g4_*
+          path: outputs/g4_confirmation
+          merge-multiple: false
+      - name: Verify 24 unchanged predictions, all 96 action forks, and policy results
+        run: |
+          python -m experiments.structural_value.scripts.g4_aggregate \
+            --root outputs/g4_confirmation \
+            --output outputs/g4_confirmation/g4_final_confirmation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awn-g4-untouched-seed-complete-confirmation
+          path: outputs/g4_confirmation/g4_final_confirmation.json
+          if-no-files-found: error
+          retention-days: 90
