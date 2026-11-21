@@ -30,8 +30,10 @@ feature selection or teacher labels.
 
 ## Validation
 
-    python -m pytest -q experiments/structural_value/tests
+    python -m pytest -q experiments/structural_value/tests/test_checkpoint_and_rollouts.py
+    python -m pytest -q experiments/structural_value/tests/test_native_g0.py
 
-The isolated tests validate contracts using a toy model, NOT native AWN.
-G0 remains blocked pending full AWN restoration/replay tests on the original
-dependencies and datasets. Never infer transfer or causal generality from this.
+The first suite verifies isolated toy contracts; the second verifies original
+AWN/DynamicMLP, its ELBO, Adam resize migration and the real paired-runner
+skip replays on synthetic train/validation examples. These are engineering
+checks, not evidence for learned policies or cross-task transfer.

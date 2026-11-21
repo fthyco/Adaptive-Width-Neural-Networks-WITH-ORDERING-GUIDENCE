@@ -18,6 +18,9 @@ the actual model.AWN and original metric.ELBO_Classification. It snapshots
 a checkpoint with Adam momentum and a live autograd-linked gate cache, restores
 forks, and compares original AWN vs skip and skip vs skip at every step.
 
+The real paired engine is tested twice with skip and actual intermediate
+horizons 1, 2, 4. Wall-time fluctuations are not equality assertions.
+
 A second stress case sets the AWN exponential rate to the same sequence
 in all branches, forcing physical shrink/growth (8, 13, 7, 12) and checking
 Adam moment migration. This does not test a policy or claim beneficial width

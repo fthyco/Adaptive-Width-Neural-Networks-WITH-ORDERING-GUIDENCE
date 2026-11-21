@@ -22,6 +22,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ..actions.action_spec import ActionKind, ActionSpec
 from ..adapters.awn_adapter import AWNAdapter
+from ..counterfactual.fork_runner import paired_rollouts
 from ..state.snapshot import TrainingSnapshot
 
 
@@ -249,6 +250,39 @@ def verify_native_g0(*, seed: int = 42) -> dict:
         widths[label] = observed_widths
         if forced is not None and len(set(observed_widths)) < 3:
             raise AssertionError("Width-stress scenario did not grow and shrink")
+    # Exercise the actual native counterfactual engine at real intermediate
+    # horizons. Wall clock is a measurement and is not required to be equal.
+    def factory(restored):
+        return AWNAdapter(
+            restored, calibration=validation, validation=validation,
+            train_examples=n, device=torch.device("cpu"),
+            namespace="native-g0-fork-runner",
+        )
+
+    runner_kwargs = {
+        "run_id": f"synthetic:seed{seed}",
+        "checkpoint_id": f"synthetic:seed{seed}:postwarmup",
+        "rollout_seed": seed + 991,
+    }
+    first = paired_rollouts(
+        snapshot, factory, batches, [ActionSpec(ActionKind.SKIP)],
+        [1, 2, 4], **runner_kwargs)
+    second = paired_rollouts(
+        snapshot, factory, batches, [ActionSpec(ActionKind.SKIP)],
+        [1, 2, 4], **runner_kwargs)
+    if len(first) != len(second) or len(first) != 3:
+        raise AssertionError("Wrong actual-horizon checkpoint counts")
+    for left, right in zip(first, second):
+        if (left.horizon_steps != right.horizon_steps or
+                left.validation_risk != right.validation_risk or
+                left.final_widths != right.final_widths or
+                left.cost["optimizer_steps"] != right.cost["optimizer_steps"] or
+                left.cost["examples"] != right.cost["examples"] or
+                not left.no_op or not right.no_op or
+                left.immediate_risk_before != left.immediate_risk_after or
+                right.immediate_risk_before != right.immediate_risk_after):
+            raise AssertionError("Native paired engine skip replay diverged")
+
     return {
         "schema": "awn_structural_value_g0_v1",
         "seed": seed, "device": "cpu",
@@ -257,6 +291,8 @@ def verify_native_g0(*, seed: int = 42) -> dict:
         "comparison": "original_AWN_vs_skip_adapter_and_independent_skip",
         "tensor_equality": "exact",
         "steps_per_case": len(batches),
+        "paired_engine_horizons": [1, 2, 4],
+        "independent_skip_replays": 2,
         "width_trajectories": widths,
         "cases": ["natural", "forced_width_migration"],
         "passed": True,
