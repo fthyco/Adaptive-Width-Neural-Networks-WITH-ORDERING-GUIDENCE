@@ -183,3 +183,23 @@ def test_pairing_rejects_missing_baseline_and_duplicate_observations():
     skip = replace(row, action=ActionSpec(ActionKind.SKIP), no_op=True)
     with pytest.raises(ValueError, match="Duplicate"):
         build_labels([skip, row, row], cost_weight=0, reference_seconds=1)
+
+
+def test_checkpoint_does_not_deepcopy_autograd_cached_gates():
+    class CachedGateModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layer = nn.Linear(2, 2)
+            self.qW_probs = [torch.sigmoid(self.layer.weight).sum(dim=1)]
+
+    model = CachedGateModel()
+    opt = torch.optim.Adam(model.parameters())
+    cache_before = model.qW_probs
+    assert cache_before[0].grad_fn is not None
+    snap = TrainingSnapshot.capture(model, opt)
+    assert model.qW_probs is cache_before
+    assert model.qW_probs[0].grad_fn is not None
+    restored = snap.fork()
+    assert torch.equal(restored.model.qW_probs[0], cache_before[0])
+    assert restored.model.qW_probs[0].grad_fn is None
+    assert restored.model.layer.weight is not model.layer.weight
