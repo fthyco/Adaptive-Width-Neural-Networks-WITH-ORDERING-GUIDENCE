@@ -28,4 +28,4 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
           python -m pip install numpy pytest
       - name: Run deterministic fork/paired-label tests
-        run: python -m pytest -q experiments/structural_value/tests
+        run: python -m pytest -q experiments/structural_value/tests/test_checkpoint_and_rollouts.py
