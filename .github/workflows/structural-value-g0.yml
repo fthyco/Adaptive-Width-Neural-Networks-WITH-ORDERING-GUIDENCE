@@ -1,0 +1,39 @@
+name: Structural value native AWN G0
+
+on:
+  pull_request:
+    paths:
+      - "experiments/structural_value/**"
+      - ".github/workflows/structural-value-g0.yml"
+  push:
+    branches:
+      - "feat/structural-value-counterfactual-pilot"
+    paths:
+      - "experiments/structural_value/**"
+      - ".github/workflows/structural-value-g0.yml"
+  workflow_dispatch:
+
+jobs:
+  native-awn-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PyTorch CPU and AWN dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+          python -m pip install mlwiz==1.7.8 torch-geometric==2.8.1 numpy pytest
+      - name: Native AWN G0, real optimizer and width migration
+        run: |
+          python -m pytest -q experiments/structural_value/tests/test_native_g0.py
+      - name: Write verifiable engineering report
+        run: |
+          python -m experiments.structural_value.scripts.verify_g0 --output g0-native-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-awn-g0-report
+          path: g0-native-report.json
