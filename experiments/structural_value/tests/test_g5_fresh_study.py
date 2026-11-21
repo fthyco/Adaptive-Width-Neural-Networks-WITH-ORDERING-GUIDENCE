@@ -1,5 +1,6 @@
 """Fresh-cohort contract tests, no PyTorch runtime required."""
 from dataclasses import replace
+import json
 
 from experiments.structural_value.g5_fresh_contract import (
     DATASETS, SEEDS, CHECKPOINTS, HORIZONS, HORIZON_STEPS)
@@ -33,6 +34,7 @@ def test_new_seed_group_holdouts_compare_same_training_and_heldout_units():
     assert result["passed"]
     assert result["decisions"] == 24 and result["paired_final_horizon_rollouts"] == 96
     assert result["test_examples_used"] == 0
+    json.dumps(result, allow_nan=False)  # Fail before publishing an invalid NaN aggregate
     assert len(result["seed_holdout"]["folds"]) == 3
     assert len(result["dataset_holdout"]["folds"]) == 2
     for fold in result["seed_holdout"]["folds"] + result["dataset_holdout"]["folds"]:

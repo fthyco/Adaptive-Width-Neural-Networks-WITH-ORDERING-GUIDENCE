@@ -1,0 +1,49 @@
+name: Structural value G5A immutable-cohort aggregate recovery
+
+on:
+  push:
+    branches: ["feat/structural-value-counterfactual-pilot"]
+    paths:
+      - "experiments/structural_value/scripts/g5_evidence_ablation.py"
+      - "experiments/structural_value/scripts/g5_fresh_ablation.py"
+      - "experiments/structural_value/tests/test_g5_fresh_study.py"
+      - ".github/workflows/structural-value-g5-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-and-aggregate-original-six-cohorts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify evidence descriptors, heldout folds and JSON serialization
+        run: |
+          python -m pip install numpy pytest
+          python -m compileall -q experiments/structural_value
+          python -m pytest -q experiments/structural_value/tests/test_g5_evidence.py experiments/structural_value/tests/test_g5_fresh_study.py experiments/structural_value/tests/test_value_predictor.py
+      - name: Download six original successful G5A experiment artifacts, no reruns
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 44857181035
+          github-token: ${{ github.token }}
+          pattern: g5-cohort-*
+          path: outputs/g5/
+          merge-multiple: true
+      - name: Re-audit raw original action/skip outcomes and serialize fixed summary
+        run: |
+          python -m experiments.structural_value.scripts.g5_fresh_ablation \
+            --root outputs/g5 --output outputs/results/g5a_fresh_evidence_ablation.json
+      - name: Publish immutable-cohort G5A ablation result
+        uses: actions/upload-artifact@v4
+        with:
+          name: awn-g5a-fresh-evidence-exploratory-ablation-recovered
+          path: outputs/results/g5a_fresh_evidence_ablation.json
+          if-no-files-found: error
+          retention-days: 90

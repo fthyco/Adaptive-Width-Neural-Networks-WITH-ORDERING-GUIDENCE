@@ -1,18 +1,9 @@
 name: Structural value G5A fresh same-checkpoint evidence ablation
 
+# Original six fresh-cohort data artifacts were completed in run 44857181035.
+# Do not rerun same seeds after observing the six paired teacher-label sets.
+# Recovery workflow repairs only the G5A report serializer.
 on:
-  push:
-    branches: ["feat/structural-value-counterfactual-pilot"]
-    paths:
-      - "experiments/structural_value/g5_evidence_features.py"
-      - "experiments/structural_value/g5_fresh_contract.py"
-      - "experiments/structural_value/scripts/g5_same_checkpoint_study.py"
-      - "experiments/structural_value/scripts/g5_fresh_ablation.py"
-      - "experiments/structural_value/scripts/g5_evidence_ablation.py"
-      - "experiments/structural_value/tests/test_g5_evidence.py"
-      - "experiments/structural_value/tests/test_g5_fresh_study.py"
-      - "experiments/structural_value/G5_EVIDENCE_AWARE_ABLATION.md"
-      - ".github/workflows/structural-value-g5-evidence-ablation.yml"
   workflow_dispatch:
 
 permissions:

@@ -196,6 +196,12 @@ def summarize(folds: list[dict]) -> dict:
         }
     out["difference_g5a_minus_g3"] = float(
         out["g5a"]["mean_net_value"] - out["g3"]["mean_net_value"])
+    observed_trajectories = sorted({(r["dataset"], r["seed"]) for r in rows})
+    if len(observed_trajectories) != 6 or any(
+        sum((r["dataset"], r["seed"]) == key for r in rows) != 4
+        for key in observed_trajectories
+    ):
+        raise AssertionError("Expected six complete training trajectories")
     out["by_training_trajectory"] = [
         {
             "dataset": ds, "seed": seed,
@@ -204,7 +210,7 @@ def summarize(folds: list[dict]) -> dict:
             "g5a_mean": float(np.mean([r["g5a_observed_value"] for r in rows
                                        if r["dataset"] == ds and r["seed"] == seed])),
         }
-        for ds in DATASETS for seed in SEEDS
+        for ds, seed in observed_trajectories
     ]
     return out
 
