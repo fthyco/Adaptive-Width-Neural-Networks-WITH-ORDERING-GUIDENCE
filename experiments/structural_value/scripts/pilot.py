@@ -8,10 +8,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import random
 import subprocess
-import sys
 
 import numpy as np
 import torch
@@ -25,8 +25,11 @@ from ..state.snapshot import TrainingSnapshot
 
 
 def future_batches(loader: DataLoader, *, seed: int,
-                   epochs: int) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
+                   epochs: int, max_steps: int | None = None
+                   ) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
     """Freeze the same training-only minibatches for every treatment fork."""
+    if max_steps is not None and max_steps < 1:
+        raise ValueError("max_steps must be positive")
     result = []
     for epoch in range(epochs):
         generator = torch.Generator().manual_seed(seed * 1009 + epoch)
@@ -34,6 +37,8 @@ def future_batches(loader: DataLoader, *, seed: int,
                             shuffle=True, num_workers=0, generator=generator)
         for x, y in stream:
             result.append((x.detach().clone(), y.detach().clone()))
+            if max_steps is not None and len(result) >= max_steps:
+                return tuple(result)
     return tuple(result)
 
 
@@ -53,9 +58,16 @@ def _atomic_jsonl(path: Path, rows: list[dict]) -> None:
 
 def run(*, dataset: str, seed: int, checkpoint_epoch: int, horizon_epochs: int,
         rollout_seed: int, output: Path, device: str, cost_weight: float,
-        reference_seconds: float, coupled_control: bool) -> dict:
+        reference_seconds: float, coupled_control: bool,
+        max_rollout_steps: int | None = None) -> dict:
+    if dataset not in ("Spiral", "SpiralHard", "DoubleMoon"):
+        raise ValueError("Dataset must be from the reference AWN benchmark")
     if checkpoint_epoch < 0 or horizon_epochs < 1:
         raise ValueError("Checkpoint epoch and horizon must be nonnegative/positive")
+    if max_rollout_steps is not None and max_rollout_steps < 1:
+        raise ValueError("max_rollout_steps must be positive")
+    if cost_weight < 0 or reference_seconds <= 0:
+        raise ValueError("Invalid cost exchange rate")
     if output.exists():
         raise FileExistsError("Refusing to overwrite or mix immutable pilot output")
     from experiments.bottleneck_triggered.common_utils import (
@@ -88,7 +100,9 @@ def run(*, dataset: str, seed: int, checkpoint_epoch: int, horizon_epochs: int,
               "horizon_epochs": horizon_epochs, "rollout_seed": rollout_seed,
               "device": device, "cost_weight": cost_weight,
               "reference_seconds": reference_seconds,
-              "coupled_control": coupled_control, "git_sha": sha}
+              "coupled_control": coupled_control,
+              "max_rollout_steps": max_rollout_steps, "git_sha": sha,
+              "learning_rate": 0.01}
     config_hash = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
     run_id = f"{dataset}:seed{seed}:{config_hash[:16]}:{sha[:12]}"
     checkpoint_id = f"{run_id}:epoch{checkpoint_epoch}:step{sum(i['training_steps'] for i in history)}"
@@ -96,7 +110,15 @@ def run(*, dataset: str, seed: int, checkpoint_epoch: int, horizon_epochs: int,
         model, optimizer, loader=train, history=history,
         provenance={"development_split": split_provenance,
                     "run_id": run_id, "checkpoint_id": checkpoint_id})
-    batches = future_batches(train, seed=rollout_seed, epochs=horizon_epochs)
+    batches = future_batches(train, seed=rollout_seed, epochs=horizon_epochs,
+                             max_steps=max_rollout_steps)
+    if not batches:
+        raise RuntimeError("No training batches available for pilot")
+    endpoints = sorted({1, max(1, math.ceil(len(batches) / 2)), len(batches)})
+    batch_digest = hashlib.sha256()
+    for x, y in batches:
+        batch_digest.update(x.contiguous().numpy().tobytes())
+        batch_digest.update(y.contiguous().numpy().tobytes())
     actions = [
         ActionSpec(ActionKind.SKIP),
         ActionSpec(ActionKind.RANDOM_POS, action_seed=rollout_seed + 301),
@@ -110,7 +132,7 @@ def run(*, dataset: str, seed: int, checkpoint_epoch: int, horizon_epochs: int,
                           train_examples=n_train, device=dev, namespace=checkpoint_id,
                           epoch=checkpoint_epoch)
 
-    rows = paired_rollouts(snapshot, factory, batches, actions, [len(batches)],
+    rows = paired_rollouts(snapshot, factory, batches, actions, endpoints,
                            run_id=run_id, checkpoint_id=checkpoint_id,
                            rollout_seed=rollout_seed)
     labels = build_labels(rows, cost_weight=cost_weight,
@@ -123,6 +145,11 @@ def run(*, dataset: str, seed: int, checkpoint_epoch: int, horizon_epochs: int,
                 "run_id": run_id, "checkpoint_id": checkpoint_id,
                 "split": split_provenance, "training_population": n_train,
                 "rollout_optimizer_steps": len(batches),
+                "rollout_endpoints": endpoints,
+                "materialized_batch_sha256": batch_digest.hexdigest(),
+                "actions": [a.payload for a in actions],
+                "paired_observations": len(rows),
+                "paired_labels": len(labels),
                 "test_examples_used_for_selection": 0,
                 "interpretation": "Engineering pilot only; not a confirmatory result"}
     (output / "manifest.json").write_text(
@@ -137,6 +164,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--checkpoint-epoch", type=int, default=10)
     parser.add_argument("--horizon-epochs", type=int, default=5)
+    parser.add_argument("--max-rollout-steps", type=int,
+                        help="Optional bounded engineering rollout in optimizer steps")
     parser.add_argument("--rollout-seed", type=int, default=12345)
     parser.add_argument("--output", type=Path, default=Path("outputs/structural_value/pilot_01"))
     parser.add_argument("--device", default="cpu")
