@@ -1,0 +1,53 @@
+name: Structural value dataset pilot
+
+on:
+  pull_request:
+    paths:
+      - "experiments/structural_value/**"
+      - ".github/workflows/structural-value-dataset-pilot.yml"
+  push:
+    branches:
+      - "feat/structural-value-counterfactual-pilot"
+    paths:
+      - "experiments/structural_value/**"
+      - ".github/workflows/structural-value-dataset-pilot.yml"
+  workflow_dispatch:
+
+jobs:
+  reference-awndata-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: [Spiral, SpiralHard]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install compatible CPU PyTorch and reference AWN loaders
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+          python -m pip install mlwiz==1.7.8 torch-geometric==2.8.1 numpy pytest
+          python -m pip install h5py datasets==3.6.0 transformers==4.57.6 openml==0.15.1 openml-pytorch==0.1.7 ucimlrepo==0.0.7
+      - name: Run matched checkpoint forks on original AWN reference dataset
+        run: |
+          python -m experiments.structural_value.scripts.pilot \
+            --dataset ${{ matrix.dataset }} --seed 42 --checkpoint-epoch 3 \
+            --horizon-epochs 1 --max-rollout-steps 8 \
+            --rollout-seed 12345 --coupled-control \
+            --cost-weight 0.01 --reference-seconds 1.0 \
+            --device cpu --output outputs/structural_value/ci_${{ matrix.dataset }}
+      - name: Fail-closed audit of disjoint splits and paired labels
+        run: |
+          python -m experiments.structural_value.scripts.audit_pilot \
+            --input outputs/structural_value/ci_${{ matrix.dataset }} \
+            --output outputs/structural_value/ci_${{ matrix.dataset }}/audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: structural-value-pilot-${{ matrix.dataset }}
+          path: outputs/structural_value/ci_${{ matrix.dataset }}
+          if-no-files-found: warn
