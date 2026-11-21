@@ -38,6 +38,7 @@ class RolloutObservation:
     cost: dict
     final_widths: tuple[int, ...]
     no_op: bool
+    action_details: dict | None = None
 
     @property
     def pair_key(self) -> tuple:
@@ -54,7 +55,7 @@ class RolloutObservation:
             "immediate_risk_before": self.immediate_risk_before,
             "immediate_risk_after": self.immediate_risk_after,
             "cost": self.cost, "final_widths": list(self.final_widths),
-            "no_op": self.no_op,
+            "no_op": self.no_op, "action_details": self.action_details,
         }
 
 
@@ -130,5 +131,5 @@ def paired_rollouts(
                     rows.append(RolloutObservation(
                         run_id, checkpoint_id, action, rollout_seed, index, float(risk),
                         float(before), float(after), ledger.as_dict(),
-                        adapter.widths(), effect.no_op))
+                        adapter.widths(), effect.no_op, effect.details))
     return rows
