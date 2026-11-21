@@ -1,0 +1,14 @@
+# Engineering-only; no untouched final seeds or test-based tuning.
+datasets: [Spiral, SpiralHard]
+seeds: [42, 123, 456]
+checkpoint_selection: history_only_predeclared
+checkpoint_strata: [early, pre_plateau, plateau, late]
+actions: [skip, random_positional, weight_positional, gradient_positional]
+control_gate_mode: neuron_coupled
+treatment_gate_mode: positional
+horizon_equivalent_epochs: 5
+rollout_replicates: 1
+primary_risk: development_validation_cross_entropy
+primary_online_cost: synchronized_wall_seconds
+no_op_policy: flag_and_exclude_from_intervention_effect_claims
+final_test_used_for_labels: false
